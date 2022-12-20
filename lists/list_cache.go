@@ -217,8 +217,8 @@ func (b *ListCache) Match(domain string, groupsToCheck []string) (found bool, gr
 }
 
 // Refresh triggers the refresh of a list
-func (b *ListCache) Refresh() {
-	_ = b.refresh(false)
+func (b *ListCache) Refresh() error {
+	return b.refresh(false)
 }
 func (b *ListCache) refresh(init bool) error {
 	var err error

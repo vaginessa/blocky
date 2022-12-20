@@ -3,7 +3,6 @@ package server
 import (
 	"bytes"
 	"encoding/base64"
-	"encoding/json"
 	"io"
 	"net"
 	"net/http"
@@ -11,7 +10,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/0xERR0R/blocky/api"
 	"github.com/0xERR0R/blocky/config"
 	. "github.com/0xERR0R/blocky/helpertest"
 	. "github.com/0xERR0R/blocky/log"
@@ -183,19 +181,10 @@ var _ = Describe("Running DNS server", func() {
 		BeforeEach(func() {
 			mockClientName.Store("")
 			// reset client cache
-			res := sut.queryResolver
-			for res != nil {
-				if t, ok := res.(*resolver.ClientNamesResolver); ok {
-					t.FlushCache()
+			clientNamesResolver, err := resolver.GetFromChainWithType[*resolver.ClientNamesResolver](sut.queryResolver)
+			Expect(err).Should(Succeed())
 
-					break
-				}
-				if c, ok := res.(resolver.ChainedResolver); ok {
-					res = c.GetNext()
-				} else {
-					break
-				}
-			}
+			clientNamesResolver.FlushCache()
 		})
 
 		AfterEach(func() {
@@ -334,76 +323,6 @@ var _ = Describe("Running DNS server", func() {
 				Expect(err).Should(Succeed())
 				Expect(resp).Should(HaveHTTPStatus(http.StatusOK))
 				Expect(resp).Should(HaveHTTPHeaderWithValue("Content-type", "text/html; charset=UTF-8"))
-			})
-		})
-	})
-
-	Describe("Query Rest API", func() {
-		When("Query API is called", func() {
-			It("Should process the query", func() {
-				req := api.QueryRequest{
-					Query: "google.de",
-					Type:  "A",
-				}
-				jsonValue, err := json.Marshal(req)
-				Expect(err).Should(Succeed())
-
-				resp, err := http.Post("http://localhost:4000/api/query", "application/json", bytes.NewBuffer(jsonValue))
-
-				Expect(err).Should(Succeed())
-				defer resp.Body.Close()
-
-				Expect(resp).Should(HaveHTTPStatus(http.StatusOK))
-				Expect(resp).Should(HaveHTTPHeaderWithValue("Content-type", "application/json"))
-
-				var result api.QueryResult
-				err = json.NewDecoder(resp.Body).Decode(&result)
-				Expect(err).Should(Succeed())
-				Expect(result.Response).Should(Equal("A (123.124.122.122)"))
-			})
-		})
-		When("Wrong request type is used", func() {
-			It("Should return internal error", func() {
-				req := api.QueryRequest{
-					Query: "google.de",
-					Type:  "WrongType",
-				}
-				jsonValue, err := json.Marshal(req)
-				Expect(err).Should(Succeed())
-
-				resp, err := http.Post("http://localhost:4000/api/query", "application/json", bytes.NewBuffer(jsonValue))
-
-				Expect(err).Should(Succeed())
-				defer resp.Body.Close()
-
-				Expect(resp.StatusCode).Should(Equal(http.StatusInternalServerError))
-			})
-		})
-		When("Internal error occurs", func() {
-			It("Should return internal error", func() {
-				req := api.QueryRequest{
-					Query: "error.",
-					Type:  "A",
-				}
-				jsonValue, err := json.Marshal(req)
-				Expect(err).Should(Succeed())
-
-				resp, err := http.Post("http://localhost:4000/api/query", "application/json", bytes.NewBuffer(jsonValue))
-				Expect(err).Should(Succeed())
-				Expect(resp.StatusCode).Should(Equal(http.StatusInternalServerError))
-				_ = resp.Body.Close()
-			})
-		})
-		When("Request is malformed", func() {
-			It("Should return internal error", func() {
-				jsonValue := []byte("")
-
-				resp, err := http.Post("http://localhost:4000/api/query", "application/json", bytes.NewBuffer(jsonValue))
-
-				Expect(err).Should(Succeed())
-				defer resp.Body.Close()
-
-				Expect(resp.StatusCode).Should(Equal(http.StatusInternalServerError))
 			})
 		})
 	})

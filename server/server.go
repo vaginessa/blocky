@@ -19,7 +19,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/0xERR0R/blocky/api"
 	"github.com/0xERR0R/blocky/config"
 	"github.com/0xERR0R/blocky/log"
 	"github.com/0xERR0R/blocky/metrics"
@@ -45,7 +44,7 @@ type Server struct {
 	dnsServers     []*dns.Server
 	httpListeners  []net.Listener
 	httpsListeners []net.Listener
-	queryResolver  resolver.Resolver
+	queryResolver  resolver.ChainedResolver
 	cfg            *config.Config
 	httpMux        *chi.Mux
 	httpsMux       *chi.Mux
@@ -175,11 +174,14 @@ func NewServer(cfg *config.Config) (server *Server, err error) {
 	server.printConfiguration()
 
 	server.registerDNSHandlers()
-	server.registerAPIEndpoints(httpRouter)
-	server.registerAPIEndpoints(httpsRouter)
-
-	registerResolverAPIEndpoints(httpRouter, queryResolver)
-	registerResolverAPIEndpoints(httpsRouter, queryResolver)
+	err = server.registerAPIEndpoints(httpRouter)
+	if err != nil {
+		return nil, err
+	}
+	err = server.registerAPIEndpoints(httpsRouter)
+	if err != nil {
+		return nil, err
+	}
 
 	return server, err
 }
@@ -241,7 +243,7 @@ func newListeners(proto string, addresses config.ListenConfig) ([]net.Listener, 
 	return listeners, nil
 }
 
-func registerResolverAPIEndpoints(router chi.Router, res resolver.Resolver) {
+/*func registerResolverAPIEndpoints(router chi.Router, res resolver.Resolver) {
 	for res != nil {
 		api.RegisterEndpoint(router, res)
 
@@ -251,7 +253,7 @@ func registerResolverAPIEndpoints(router chi.Router, res resolver.Resolver) {
 			return
 		}
 	}
-}
+}*/
 
 func createTLSServer(address string, cert tls.Certificate) (*dns.Server, error) {
 	return &dns.Server{
@@ -393,7 +395,7 @@ func createQueryResolver(
 	cfg *config.Config,
 	bootstrap *resolver.Bootstrap,
 	redisClient *redis.Client,
-) (r resolver.Resolver, err error) {
+) (r resolver.ChainedResolver, err error) {
 	blocking, blErr := resolver.NewBlockingResolver(cfg.Blocking, redisClient, bootstrap)
 	parallel, pErr := resolver.NewParallelBestResolver(cfg.Upstream.ExternalResolvers, bootstrap, cfg.StartVerifyUpstream)
 	clientNames, cnErr := resolver.NewClientNamesResolver(cfg.ClientLookup, bootstrap, cfg.StartVerifyUpstream)
@@ -439,7 +441,7 @@ func (s *Server) registerDNSHandlers() {
 func (s *Server) printConfiguration() {
 	logger().Info("current configuration:")
 
-	res := s.queryResolver
+	res := s.queryResolver.(resolver.Resolver)
 	for res != nil {
 		logger().Infof("-> resolver: '%s'", resolver.Name(res))
 
