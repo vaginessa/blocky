@@ -9,6 +9,7 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
+	"github.com/go-co-op/gocron"
 	"math"
 	"math/big"
 	mrand "math/rand"
@@ -409,6 +410,9 @@ func createQueryResolver(
 		return nil, mErr
 	}
 
+	scheduler := gocron.NewScheduler(time.UTC)
+	scheduler.StartAsync()
+
 	r = resolver.Chain(
 		resolver.NewFilteringResolver(cfg.Filtering),
 		resolver.NewFqdnOnlyResolver(cfg.FqdnOnly),
@@ -417,7 +421,7 @@ func createQueryResolver(
 		resolver.NewQueryLoggingResolver(cfg.QueryLog),
 		resolver.NewMetricsResolver(cfg.Prometheus),
 		resolver.NewRewriterResolver(cfg.CustomDNS.RewriterConfig, resolver.NewCustomDNSResolver(cfg.CustomDNS)),
-		resolver.NewHostsFileResolver(cfg.HostsFile),
+		resolver.NewHostsFileResolver(cfg.HostsFile, scheduler),
 		blocking,
 		resolver.NewCachingResolver(cfg.Caching, redisClient),
 		resolver.NewRewriterResolver(cfg.Conditional.RewriterConfig, condUpstream),

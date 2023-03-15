@@ -2,6 +2,7 @@ package resolver
 
 import (
 	"context"
+	"github.com/go-co-op/gocron"
 	"time"
 
 	"github.com/0xERR0R/blocky/config"
@@ -48,7 +49,7 @@ var _ = Describe("HostsFileResolver", func() {
 	})
 
 	JustBeforeEach(func() {
-		sut = NewHostsFileResolver(sutConfig)
+		sut = NewHostsFileResolver(sutConfig, gocron.NewScheduler(time.UTC))
 		m = &mockResolver{}
 		m.On("Resolve", mock.Anything).Return(&Response{Res: new(dns.Msg)}, nil)
 		sut.Next(m)
@@ -99,7 +100,7 @@ var _ = Describe("HostsFileResolver", func() {
 
 		When("Hosts file is not set", func() {
 			BeforeEach(func() {
-				sut = NewHostsFileResolver(config.HostsFileConfig{})
+				sut = NewHostsFileResolver(config.HostsFileConfig{}, gocron.NewScheduler(time.UTC))
 				m = &mockResolver{}
 				m.On("Resolve", mock.Anything).Return(&Response{Res: new(dns.Msg)}, nil)
 				sut.Next(m)

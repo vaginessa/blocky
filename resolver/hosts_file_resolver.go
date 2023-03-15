@@ -3,16 +3,15 @@ package resolver
 import (
 	"context"
 	"fmt"
-	"net"
-	"os"
-	"time"
-
 	"github.com/0xERR0R/blocky/config"
 	"github.com/0xERR0R/blocky/lists/parsers"
 	"github.com/0xERR0R/blocky/model"
 	"github.com/0xERR0R/blocky/util"
+	"github.com/go-co-op/gocron"
 	"github.com/miekg/dns"
 	"github.com/sirupsen/logrus"
+	"net"
+	"os"
 )
 
 const (
@@ -30,7 +29,7 @@ type HostsFileResolver struct {
 
 type HostsFileEntry = parsers.HostsFileEntry
 
-func NewHostsFileResolver(cfg config.HostsFileConfig) *HostsFileResolver {
+func NewHostsFileResolver(cfg config.HostsFileConfig, scheduler *gocron.Scheduler) *HostsFileResolver {
 	r := HostsFileResolver{
 		configurable: withConfig(&cfg),
 		typed:        withType("hosts_file"),
@@ -41,7 +40,9 @@ func NewHostsFileResolver(cfg config.HostsFileConfig) *HostsFileResolver {
 
 		r.cfg.Filepath = "" // don't try parsing the file again
 	} else {
-		go r.periodicUpdate()
+		if r.cfg.RefreshPeriod.ToDuration() > 0 {
+			scheduler.Every(r.cfg.RefreshPeriod.ToDuration()).WaitForSchedule().Do(r.periodicUpdate)
+		}
 	}
 
 	return &r
@@ -190,18 +191,7 @@ func (r *HostsFileResolver) parseHostsFile(ctx context.Context) error {
 }
 
 func (r *HostsFileResolver) periodicUpdate() {
-	if r.cfg.RefreshPeriod.ToDuration() > 0 {
-		ticker := time.NewTicker(r.cfg.RefreshPeriod.ToDuration())
-		defer ticker.Stop()
-
-		for {
-			<-ticker.C
-
-			r.log().WithField("file", r.cfg.Filepath).Debug("refreshing hosts file")
-
-			util.LogOnError("can't refresh hosts file: ", r.parseHostsFile(context.Background()))
-		}
-	}
+	util.LogOnError("can't refresh hosts file: ", r.parseHostsFile(context.Background()))
 }
 
 // stores hosts file data for IP versions separately
